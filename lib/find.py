@@ -6,6 +6,10 @@
   sessync find -p my-site …        only projects with this string in the path
   sessync find -n 40 …             how many sessions to show (15 by default)
   sessync find --raw …             search raw transcripts, tool output included
+  sessync find --no-mask …         show key-like strings as they are (masked by default)
+
+Output passes a mask: strings that look like keys (sk-…, ghp_…, github_pat_…, AKIA…, long
+base64/hex, password=/token=/secret= with a value) are shown as ***.
 
 Searches the conversation itself — your messages and Claude's answers — not the injected service
 text (CLAUDE.md, skill descriptions, command output): otherwise any word from there would match
@@ -21,6 +25,10 @@ DOC_RU = """sessync find — поиск по всем сессиям Claude Code
   sessync find -p my-site …        только проекты, в пути которых есть эта строка
   sessync find -n 40 …             сколько сессий показать (по умолчанию 15)
   sessync find --raw …             искать по сырым транскриптам, включая вывод инструментов
+  sessync find --no-mask …         показывать похожее на ключи как есть (по умолчанию скрыто)
+
+Вывод проходит маску: похожее на ключи (sk-…, ghp_…, github_pat_…, AKIA…, длинные base64/hex,
+password=/token=/secret= со значением) показывается как ***.
 
 Ищет по самой переписке — вашим сообщениям и ответам Claude, — а не по служебным вставкам
 (CLAUDE.md, описания навыков, вывод команд): иначе любое слово оттуда находилось бы везде.
@@ -62,6 +70,37 @@ def clean(s):
     """Text from a transcript is data: control characters (ESC sequences, bidi) must not reach
     the terminal and run there."""
     return "".join(ch for ch in (s or "") if unicodedata.category(ch) not in ("Cc", "Cf"))
+
+
+MASK = "***"
+# Order matters: a labelled value first, then the known key shapes, then long opaque runs.
+SECRET_RES = [
+    re.compile(r"(?i)\b((?:pass(?:word|wd)?|pwd|token|secret|api[_-]?key|access[_-]?key)[\"']?\s*"
+               r"(?:=|\"\s*:)\s*[\"']?)[^\s\"',;&)}\]]+"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+    re.compile(r"\b[0-9a-fA-F]{32,}\b"),
+]
+B64_RE = re.compile(r"[A-Za-z0-9+/_-]{32,}={0,2}")
+
+
+def _b64(m):
+    t = m.group(0)
+    # a key has all kinds of characters; a long word or a path has not
+    if re.search(r"[a-z]", t) and re.search(r"[A-Z]", t) and re.search(r"[0-9]", t):
+        return MASK
+    return t
+
+
+def mask(s):
+    """Hide what looks like a key. Applied to everything `find` prints unless --no-mask."""
+    s = s or ""
+    s = SECRET_RES[0].sub(lambda m: m.group(1) + MASK, s)
+    for rx in SECRET_RES[1:]:
+        s = rx.sub(MASK, s)
+    return B64_RE.sub(_b64, s)
 
 
 def c(code, s):
@@ -264,11 +303,13 @@ def main():
     ap.add_argument("-p", "--project")
     ap.add_argument("-n", type=int, default=15)
     ap.add_argument("--raw", action="store_true")
+    ap.add_argument("--no-mask", action="store_true")
     ap.add_argument("-h", "--help", action="store_true")
     a = ap.parse_args()
     if a.help:
         print((DOC_RU if RU else __doc__).strip())
         return
+    hide = (lambda x: x) if a.no_mask else mask
     rg = rg_bin()
     metas = update_index()
 
@@ -293,13 +334,13 @@ def main():
                   reverse=True)
     for last, k, hit in rows[: a.n]:
         m = metas.get(k, {})
-        name = clean(m.get("title") or m.get("first") or "")
+        name = hide(clean(m.get("title") or m.get("first") or ""))
         if len(name) > 90:
             name = name[:89] + "…"
         cwd = here(m.get("cwd"))
-        print(c("1", last.strftime("%Y-%m-%d %H:%M")) + "  " + c("36", clean(short(cwd))) + "  " + name)
+        print(c("1", last.strftime("%Y-%m-%d %H:%M")) + "  " + c("36", hide(clean(short(cwd)))) + "  " + name)
         if hit:
-            sn = clean(snippet(hit, a.terms[0], rg, a.raw))
+            sn = hide(clean(snippet(hit, a.terms[0], rg, a.raw)))
             if sn:
                 print("   " + c("2", "…" + sn[:220] + "…"))
         sid = clean(Path(k).stem)

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `sessync find` masks what looks like a key in its output: `sk-…`, `ghp_…`, `github_pat_…`, `AKIA…`, long base64
+  and hex, values of `password=`, `token=`, `secret=`. `--no-mask` shows the text as it is. The mask is for the
+  case when the output goes to a place that should not see secrets; it is not a guarantee that nothing is left.
+
 ## 3.0.2 — 2026-10-15
 
 - A background session (`claude --bg`) is kept open under its own process, not the shared `claude daemon`:
