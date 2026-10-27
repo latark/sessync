@@ -129,7 +129,8 @@ sessync find                    # latest sessions in all projects
 Each result shows the date, the folder, the title, a matching snippet and a ready command such as
 `cd ~/projects/my-site && claude -r 3bb6f76a-…`. The search covers only the conversation itself —
 your messages and Claude's answers. Injected service text and tool output are searched with
-`--raw`.
+`--raw`. The output passes a mask: what looks like a key (`sk-…`, `ghp_…`, `github_pat_…`, `AKIA…`, long
+base64 or hex, a value after `password=`, `token=`, `secret=`) is shown as `***`; `--no-mask` turns it off.
 
 | Command | What it does |
 |---|---|

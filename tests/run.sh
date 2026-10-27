@@ -938,6 +938,37 @@ out=$(ss A find опасныйтекст)
 check "find находит сессию с управляющими символами" grep -q 'claude -r s6' <<<"$out"
 check "find не выводит ESC, BEL и bidi" sh -c "! printf '%s' \"\$1\" | LC_ALL=C grep -q \$'[\\x1b\\x07]\\|\\xe2\\x80\\xae'" _ "$out"
 
+echo "== Поиск: маска похожего на ключи"
+# Значения собраны из частей: в исходнике нет цельных строк, похожих на настоящие ключи. sk-, ghp_ и github_pat_
+# — только строчные буквы: правило длинных base64 их не поймает, и тест проверяет именно их правила
+sk="sk-""ant-api03-ab12cd34ef56gh78ij90"; gh="ghp_""ab12cd34ef56gh78ij90kl12mn34op56qr78"
+pat="gith""ub_pat_""11abcdefg0abcdefghij_klmnopqrstuvwxyz0123456789"; ak="AKIA""IOSFODNN7EXAMPLE"
+hex="0123456789abcdef0123456789abcdef0123"; b64="dGhpc0lzQUxvbmdCYXNlNjRTZWNyZXQ0dGVzdFhZ"
+say A -tmp-m1 m1 "маскаа1 ключ $sk конец"
+say A -tmp-m1 m2 "маскаб2 токен $gh конец"
+say A -tmp-m1 m3 "маскав3 доступ $pat конец"
+say A -tmp-m1 m4 "маскаг4 облако $ak конец"
+say A -tmp-m1 m5 "маскад5 хеш $hex конец"
+say A -tmp-m1 m6 "маскае6 данные $b64 конец"
+say A -tmp-m1 m7 "маскаж7 password=hunter2value конец"
+say A -tmp-m1 m8 "масказ8 token=abcd1234 и secret=zzz9 конец"
+plain="Hello-World-Of-Long-Words-Here-Again /Users/artemk/sessync/lib/find.py пароль: не трогать"
+say A -tmp-m1 m9 "маскаи9 $plain"
+for pair in "а1:$sk" "б2:$gh" "в3:$pat" "г4:$ak" "д5:$hex" "е6:$b64" "ж7:hunter2value" "з8:abcd1234"; do
+  w="маска${pair%%:*}"; v="${pair#*:}"
+  out=$(ss A find "$w")
+  check "маска: $w — сессия найдена" grep -q 'claude -r m' <<<"$out"
+  check "маска: $w — значение скрыто" sh -c '! printf "%s" "$1" | grep -qF -- "$2"' _ "$out" "$v"
+  check "маска: $w — стоит ***" grep -qF '***' <<<"$out"
+  check "маска: $w --no-mask показывает значение" sh -c "$(declare -f ss); T='$T' here='$here'; ss A find --no-mask '$w' | grep -qF -- '$v'"
+done
+out=$(ss A find масказ8); check "маска: secret= тоже скрыт" sh -c '! printf "%s" "$1" | grep -qF zzz9' _ "$out"
+out=$(ss A find маскаи9)
+check "маска: обычный текст не портится" grep -qF "$plain" <<<"$out"
+check "маска: у обычного текста нет ***" sh -c '! printf "%s" "$1" | grep -qF "***"' _ "$out"
+out=$(ss A find --raw маскаа1)
+check "маска: и с --raw ключ скрыт" sh -c '! printf "%s" "$1" | grep -qF -- "$2"' _ "$out" "$sk"
+
 echo "== Права файлов: только владелец, как у транскриптов Claude Code"
 perm() { stat -f %Lp "$1"; }
 check "индекс поиска — 700" test "$(perm "$T/A/cache/sessync/find")" = 700
