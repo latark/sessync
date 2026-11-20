@@ -31,7 +31,8 @@ new session id, and a "<title> (Branch)" title. Its id comes from the session id
 where the versions part, so every Mac that meets the same split makes the same branch, and a Mac
 whose branch is already a separate session gives way and appends to it. A continuation of only
 Claude Code's service lines (a session opened and closed, /exit) is not worth a branch and goes.
-Other files keep the longer version under the name and the other next to it as <file>.conflictN.
+Other files keep the newer version under the name (the bigger one when the times are the same) and the
+other next to it as <file>.conflictN: they are rewritten whole, so the newer one has the latest state.
 
 The file of a session open in claude on this Mac (Claude Code's registry --sessions, sessync's
 own hooks --own-open, --open) is not changed: Claude Code
@@ -237,8 +238,22 @@ def unsafe(key):
     return key.startswith("/") or any(p in ("", ".", "..") for p in key.split("/"))
 
 
+MTIME_SLACK = 2  # seconds: storage times can be rounded, and two Macs' clocks are not exactly the same
+
+
 def kind_of(key):
     return "link" if key.endswith(LINK) else "log" if key.endswith(".jsonl") else "whole"
+
+
+def newer_here(l, rf):
+    """A file changed on both Macs keeps the newer version under its name: such files (subagent .meta.json,
+    tool results) are rewritten whole, so the newer one has the latest state, whatever its size. Times
+    closer than MTIME_SLACK (or unknown) — the bigger one, as before."""
+    there = mtime_of(rf.base[1])
+    here = l.mtime / 1e9
+    if there is not None and abs(here - there) > MTIME_SLACK:
+        return here > there
+    return l.size > rf.base[0]
 
 
 def session_of(rel):
@@ -905,7 +920,7 @@ class Engine:
         else:
             lc, rc = not local_same(), not remote_same()
         if lc and rc:
-            if kind == "whole" and l.size > rf.base[0]:
+            if kind == "whole" and newer_here(l, rf):
                 self.get(key, rf, 0, "conflict-local")
             else:
                 self.get(key, rf, 0, "conflict-remote")
@@ -1406,13 +1421,13 @@ class Engine:
             copy = self.conflict_name(path)
             os.rename(path, copy)
             place_new(delta, path)
-            log(f"{key}: " + tx("conflict — smaller here, saved as ", "конфликт — здесь меньше, сохранено как ") + os.path.basename(copy))
+            log(f"{key}: " + tx("conflict — older here, saved as ", "конфликт — здесь старее, сохранено как ") + os.path.basename(copy))
         elif how == "conflict-local":
             copy = self.conflict_name(path)
             place_new(delta, copy)
             st = os.stat(path)
             self.puts.append((key, path, ("whole", st.st_size), Local("whole", path, st.st_size, st.st_mtime_ns), []))
-            log(f"{key}: " + tx("conflict — bigger here, the storage version saved as ", "конфликт — здесь больше, версия хранилища сохранена как ") + os.path.basename(copy))
+            log(f"{key}: " + tx("conflict — newer here, the storage version saved as ", "конфликт — здесь новее, версия хранилища сохранена как ") + os.path.basename(copy))
             return True
         when = mtime_of(rf.base[1])
         if when:
@@ -1430,6 +1445,8 @@ class Engine:
             out = os.path.join(self.work, "out", "b", key)
             if what[0] in ("base", "whole"):
                 clone_prefix(path, out, what[-1])
+                if what[0] == "whole":  # the storage keeps the file's own time: conflicts compare it
+                    os.utime(out, ns=(l.mtime, l.mtime))
                 staged.append((key, path, what, l, drop, file_sig(out, what[-1]) if what[0] == "base" else None))
             elif what[0] == "link":
                 os.makedirs(os.path.dirname(out), exist_ok=True)

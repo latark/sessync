@@ -292,11 +292,21 @@ check "старый временный файл прерванного запу�
 check "свежий не тронут (его может писать restore)" test -e "$T/P/projects/-tmp-p4/new.sessync.tmp"
 check "временные файлы не синхронизируются" test ! -e "$T/Q/projects/-tmp-p4/new.sessync.tmp"
 rm "$T/P/projects/-tmp-p4/new.sessync.tmp"
-echo "версия Q, она больше версии P" > "$T/Q/projects/$A1"
+# переписанный целиком файл (.meta.json субагента): побеждает новая версия, даже если она меньше
+echo "версия Q, старая, но больше версии P" > "$T/Q/projects/$A1"; touch -t 202601010000 "$T/Q/projects/$A1"
 echo "версия P" > "$T/P/projects/$A1"
 run Q now >/dev/null; run P now >/dev/null; run P now >/dev/null; run Q now >/dev/null
-check "конфликт вложения: у обоих большая версия" sh -c "grep -q 'версия Q' '$T/P/projects/$A1' && grep -q 'версия Q' '$T/Q/projects/$A1'"
-check "конфликт вложения: меньшая — копией у обоих" sh -c "grep -q 'версия P' '$T/P/projects/$A1.conflict1' && grep -q 'версия P' '$T/Q/projects/$A1.conflict1'"
+check "конфликт вложения: у обоих новая версия, хоть и меньше" sh -c "grep -q 'версия P' '$T/P/projects/$A1' && grep -q 'версия P' '$T/Q/projects/$A1'"
+check "конфликт вложения: старая — копией у обоих" sh -c "grep -q 'версия Q' '$T/P/projects/$A1.conflict1' && grep -q 'версия Q' '$T/Q/projects/$A1.conflict1'"
+check "в журнале — «здесь новее»" grep -q 'здесь новее' "$(stf P sync.log)"
+rm "$T/P/projects/$A1.conflict1" "$T/Q/projects/$A1.conflict1"
+run P now >/dev/null; run Q now >/dev/null
+# время одно и то же — как раньше, большая версия
+echo "версия Q, она больше версии P" > "$T/Q/projects/$A1"; touch -t 202601020000 "$T/Q/projects/$A1"
+echo "версия P" > "$T/P/projects/$A1"; touch -t 202601020000 "$T/P/projects/$A1"
+run Q now >/dev/null; run P now >/dev/null; run P now >/dev/null; run Q now >/dev/null
+check "конфликт вложения, время одно: у обоих большая версия" sh -c "grep -q 'версия Q' '$T/P/projects/$A1' && grep -q 'версия Q' '$T/Q/projects/$A1'"
+check "конфликт вложения, время одно: меньшая — копией у обоих" sh -c "grep -q 'версия P' '$T/P/projects/$A1.conflict1' && grep -q 'версия P' '$T/Q/projects/$A1.conflict1'"
 rm "$T/P/projects/$A1" "$T/P/projects/$A1.conflict1"
 run P now >/dev/null; run Q now >/dev/null
 check "удалённое вложение удалено и на другом Mac" test ! -e "$T/Q/projects/$A1" -a ! -e "$T/Q/projects/$A1.conflict1"

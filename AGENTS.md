@@ -126,7 +126,11 @@ edit is live at once: hooks and the background loop run it. Before changing the 
 off`, after `tests/run.sh` and checking — `sessync on`.
 
 `tests/run.sh` must pass whole, also with `/usr/bin/python3` (python 3.9). New behaviour — a new
-scenario in it. Tests don't touch the Keychain, the clipboard, the real `~/.claude` or
+scenario in it. **The full run goes to GitHub Actions, not this Mac**: the repository is public, so
+its macOS minutes are free, and `.github/workflows/test.yml` runs both pythons on every push and pull
+request (~20 min). Push a branch, open a pull request and wait for its checks (`gh pr checks`); don't
+run the whole `tests/run.sh` locally — it takes more than 10 minutes and loads the Mac. Locally only
+what is quick to look at while writing a scenario. Tests don't touch the Keychain, the clipboard, the real `~/.claude` or
 `~/.local/bin`: the `SESSYNC_TEST_REMOTE` mode (a local folder instead of the storage; secrets from
 the environment or the folder `SESSYNC_TEST_KEYCHAIN`; the clipboard — a named pasteboard
 `SESSYNC_TEST_PASTEBOARD`) and a temporary `HOME` for install/uninstall. On a real storage:
@@ -135,7 +139,7 @@ the environment or the folder `SESSYNC_TEST_KEYCHAIN`; the clipboard — a named
 ## Releasing
 
 1. `VERSION` in `bin/sessync`, a section with the date in `CHANGELOG.md`.
-2. `tests/run.sh` passes with both pythons; CI is green.
+2. CI is green on the pull request (both pythons; see Checking).
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`; `gh release create vX.Y.Z` with the CHANGELOG section.
 4. The tap (`latark/homebrew-tap`, `Formula/sessync.rb`): `url` of the new tag, `sha256` —
    `curl -sL <url> | shasum -a 256`; `brew audit --strict --online latark/tap/sessync`,
