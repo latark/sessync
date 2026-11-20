@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 — 2026-11-20
 
+- A file other than a session that changed on two Macs (a subagent's `.meta.json`, a tool result) keeps the
+  **newer** version under its name, not the bigger one: such files are rewritten whole, and the bigger
+  version could be the older state (a subagent shown as still running after it finished). The other version
+  stays next to it as `<name>.conflict1`, as before; with the same time on both Macs the bigger one wins.
+  The storage now keeps such a file's own modification time.
 - `sessync find` masks what looks like a key in its output: `sk-…`, `ghp_…`, `github_pat_…`, `AKIA…`, long base64
   and hex, values of `password=`, `token=`, `secret=`. `--no-mask` shows the text as it is. The mask is for the
   case when the output goes to a place that should not see secrets; it is not a guarantee that nothing is left.

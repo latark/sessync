@@ -341,8 +341,10 @@ sessions deleted again.
   continuation of only Claude Code's service lines (the session was opened and closed) is dropped.
   Why not merge both into one file, as some tools do: Claude Code keeps branches in one file too
   (after `/rewind`), but shows only one of them — the other could not be opened from `/resume` or
-  with `claude -r`. Other files that changed on two Macs keep the bigger version under the name and
-  the other as `<name>.conflict1` next to it; a session file that got shorter is a conflict too.
+  with `claude -r`. Other files that changed on two Macs (subagent `.meta.json`, tool results) are
+  rewritten whole, so the newer version stays under the name (the bigger one if the times are the
+  same) and the other goes next to it as `<name>.conflict1`; a session file that got shorter is a
+  conflict too.
 - **Open sessions.** Claude Code reads a session's file when it opens it, and from then on only
   appends to it. So sessync never changes the file of a session open in `claude` on this Mac (it
   knows them from its own hooks and from Claude Code's registry, `~/.claude/sessions/`): lines from
