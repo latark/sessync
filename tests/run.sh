@@ -780,6 +780,15 @@ rmdir "$(stf A lock)"
 check "следующая синхронизация проходит" run A now
 check "и снимает просьбу" test ! -e "$(stf A again)"
 check "блокировка снята" test ! -e "$(stf A lock)"
+mkdir "$(stf A lock)"; (exec -a sessync-holder sleep 60) & holder=$!
+echo $holder > "$(stf A lock)/pid"; touch -t 202001010000 "$(stf A lock)"
+check "старая блокировка живого хозяина не снимается: вторая синхронизация не встаёт рядом" has A 'пройдёт ещё раз' now
+kill $holder; wait $holder 2>/dev/null
+check "хозяина нет — блокировку снимает следующая синхронизация" run A now
+check "и после себя убирает" test ! -e "$(stf A lock)"
+mkdir "$(stf A lock)"; echo 1 > "$(stf A lock)/pid"
+check "чужую блокировку при выходе не снимает" sh -c "CLAUDE_CONFIG_DIR='$T/A' XDG_CONFIG_HOME='$T/A/config' XDG_STATE_HOME='$T/A/state' bash -c \"source '$here/bin/sessync' version >/dev/null; release_lock\"; test -d '$(stf A lock)'"
+rm -rf "$(stf A lock)"
 
 echo "== Мелочи"
 src() { CLAUDE_CONFIG_DIR="$T/A" XDG_CONFIG_HOME="$T/A/config" XDG_STATE_HOME="$T/A/state" bash -c "source '$here/bin/sessync' version >/dev/null; $1"; }

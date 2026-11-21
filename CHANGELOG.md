@@ -6,6 +6,10 @@
   GOAWAY right after an upload's body was sent; rclone can't retry such a request, so the same files failed on
   every run ("http2: Transport received Server's graceful shutdown GOAWAY after Request.Body was written") and
   the status showed "did not finish (code 1)". Other rclone remotes are not changed.
+- The sync lock holds the pid of its holder and is taken over only when that process is gone. Before, a lock
+  older than 120 minutes was treated as left behind: a first run after moving project folders that took more than
+  two hours got a second sync started next to it, in the same work folder. A process that lost the lock no longer
+  removes it on exit. A lock left by an older version is still taken over after 120 minutes.
 
 ## 3.1.0 — 2026-11-20
 
