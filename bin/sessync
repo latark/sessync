@@ -8,7 +8,7 @@
 # When: Claude Code hooks at session start and end, plus every 10 minutes while any claude is open.
 # When the last claude closes, the background loop ends by itself.
 set -u
-VERSION=3.1.0
+VERSION=3.1.1
 # Everything sessync creates (downloaded sessions, other Macs' prompts, the log) is owner-only,
 # like Claude Code's own transcripts
 umask 077
@@ -157,6 +157,10 @@ load_env() {
         RCLONE_CONFIG_STORE_ACCESS_KEY_ID="$ak" RCLONE_CONFIG_STORE_SECRET_ACCESS_KEY="$sk"
       [ -n "$ENDPOINT" ] && export RCLONE_CONFIG_STORE_ENDPOINT="$ENDPOINT"
       [ "$PROVIDER" = AWS ] || export RCLONE_CONFIG_STORE_FORCE_PATH_STYLE=true
+      # HTTP/1.1: S3 servers behind HTTP/2 proxies close connections with GOAWAY after the body of an upload
+      # was sent; rclone can't retry such a PUT ("graceful shutdown GOAWAY after Request.Body was written"),
+      # and the same files fail on every run (3.1.1)
+      export RCLONE_DISABLE_HTTP2=true
       R="store:$BUCKET"
     fi
   fi
