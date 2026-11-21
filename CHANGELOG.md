@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.1 — 2026-11-21
+
+- S3 storage is reached over HTTP/1.1 (`RCLONE_DISABLE_HTTP2`). Some S3 services close HTTP/2 connections with
+  GOAWAY right after an upload's body was sent; rclone can't retry such a request, so the same files failed on
+  every run ("http2: Transport received Server's graceful shutdown GOAWAY after Request.Body was written") and
+  the status showed "did not finish (code 1)". Other rclone remotes are not changed.
+
 ## 3.1.0 — 2026-11-20
 
 - A file other than a session that changed on two Macs (a subagent's `.meta.json`, a tool result) keeps the
