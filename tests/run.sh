@@ -296,6 +296,15 @@ run P now >/dev/null; run Q now >/dev/null
 check "сбой был" test ! -e "$T/fail-copy"
 check "после оборванной отправки правка — не конфликт" test ! -e "$T/P/projects/$A3.conflict1"
 check "и новая версия дошла до другого Mac" sh -c "! grep -q finished '$T/Q/projects/$A3'"
+# целый файл переписан после плана, до отправки (окно дописало .meta.json субагента): прогон не падает,
+# файл уходит в следующий раз
+echo '{"agentType":"argus","finished":true,"description":"длинная версия"}' > "$T/P/projects/$A3"
+printf '{"agentType":"argus","x":1}\n' > "$T/A3new"   # короче той, что видел план
+SESSYNC_TEST_REWRITE="$T/A3new:$T/P/projects/$A3" run P now >/dev/null
+check "переписанный во время прогона — прогон не упал" not grep -q 'стал короче' "$(stf P sync.log)"
+check "в журнале — «отправлю в следующий раз»" grep -q 'изменился во время синхронизации' "$(stf P sync.log)"
+run P now >/dev/null; run Q now >/dev/null
+check "в следующий раз ушёл" grep -q '"x":1' "$T/Q/projects/$A3"
 echo old > "$T/P/projects/-tmp-p4/old.sessync.tmp"; touch -t 202601010000 "$T/P/projects/-tmp-p4/old.sessync.tmp"
 echo new > "$T/P/projects/-tmp-p4/new.sessync.tmp"
 run P now >/dev/null; run Q now >/dev/null

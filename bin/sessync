@@ -8,7 +8,7 @@
 # When: Claude Code hooks at session start and end, plus every 10 minutes while any claude is open.
 # When the last claude closes, the background loop ends by itself.
 set -u
-VERSION=3.1.2
+VERSION=3.1.3
 LOCK_LONG_MIN=180   # a sync running longer — the status line says so
 LOCK_HUNG_MIN=1440  # a lock held longer — taken over even if its holder is alive (hung)
 # Everything sessync creates (downloaded sessions, other Macs' prompts, the log) is owner-only,

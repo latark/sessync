@@ -197,6 +197,15 @@ def clone_prefix(src, dst, n):
     os.truncate(dst, n)
 
 
+def same_whole(path, l):
+    """The file is still the version the plan saw (size and time) — a whole file is sent only as that version."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    return (st.st_size, st.st_mtime_ns) == (l.size, l.mtime)
+
+
 def copy_range(src, dst, a, b):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(src, "rb") as f, open(dst, "wb") as o:
@@ -1445,10 +1454,22 @@ class Engine:
         if not self.puts:
             return
         staged = []
+        swap = os.environ.get("SESSYNC_TEST_REWRITE") if os.environ.get("SESSYNC_TEST_REMOTE") else None
+        if swap and os.path.exists(swap.split(":", 1)[0]):  # tests: a file rewritten after the plan, before the upload
+            os.replace(*swap.split(":", 1))
         for key, path, what, l, drop in self.puts:
             out = os.path.join(self.work, "out", "b", key)
+            if what[0] == "whole" and not same_whole(path, l):
+                # rewritten whole while this run went (a subagent's .meta.json): not a broken file, just a newer
+                # version — sent next time; before, the whole run stopped with "got shorter" (code 1)
+                log(f"{key}: " + tx("changed during the sync — will send next time", "изменился во время синхронизации — отправлю в следующий раз"))
+                continue
             if what[0] in ("base", "whole"):
                 clone_prefix(path, out, what[-1])
+                if what[0] == "whole" and not same_whole(path, l):  # changed while being copied
+                    os.remove(out)
+                    log(f"{key}: " + tx("changed during the sync — will send next time", "изменился во время синхронизации — отправлю в следующий раз"))
+                    continue
                 if what[0] == "whole":  # the storage keeps the file's own time: conflicts compare it
                     os.utime(out, ns=(l.mtime, l.mtime))
                 staged.append((key, path, what, l, drop, file_sig(out, what[-1]) if what[0] == "base" else None))
