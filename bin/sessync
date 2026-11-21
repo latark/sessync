@@ -9,6 +9,8 @@
 # When the last claude closes, the background loop ends by itself.
 set -u
 VERSION=3.1.1
+LOCK_LONG_MIN=180   # a sync running longer — the status line says so
+LOCK_HUNG_MIN=1440  # a lock held longer — taken over even if its holder is alive (hung)
 # Everything sessync creates (downloaded sessions, other Macs' prompts, the log) is owner-only,
 # like Claude Code's own transcripts
 umask 077
@@ -530,15 +532,38 @@ session_open() {  # $1 — session id: open in claude on this Mac (Claude Code's
   engine opened "$1" --sessions "$cfg/sessions" --own-open "$st/open"
 }
 
-# The sync lock. $1 — wait for a running sync (2 min at most), or one try
+# The sync lock: the folder "lock" with the holder's pid inside. $1 — wait for a running sync (2 min at most),
+# or one try. A lock is stale only when its holder is gone: a long first run after moving projects takes hours,
+# and taking the lock by age put a second engine into the same work folder (3.1.1). A lock without a pid (an older
+# version) — after 120 min, as before.
+lock_stale() {
+  local p
+  p=$(cat "$st/lock/pid" 2>/dev/null)
+  if [ -n "$p" ]; then
+    # a holder alive for a day is hung (rclone waiting for a server forever): the archive must not stop silently
+    [ -n "$(find "$st/lock" -maxdepth 0 -mmin +"$LOCK_HUNG_MIN" 2>/dev/null)" ] && return 0
+    ps -p "$p" -o command= 2>/dev/null | grep -q sessync && return 1
+    return 0
+  fi
+  [ -n "$(find "$st/lock" -maxdepth 0 -mmin +120 2>/dev/null)" ]
+}
+lock_try() {
+  [ -d "$st/lock" ] && lock_stale && rm -rf "$st/lock"
+  mkdir "$st/lock" 2>/dev/null || return 1
+  echo $$ > "$st/lock/pid"
+}
+# Only the holder removes the lock: a process that lost it must not free the one who holds it now
+release_lock() {
+  [ "$(cat "$st/lock/pid" 2>/dev/null)" = "$$" ] && rm -rf "$st/lock"
+  return 0
+}
 take_lock() {
   local i
-  find "$st/lock" -maxdepth 0 -mmin +120 -exec rmdir {} \; 2>/dev/null
-  mkdir "$st/lock" 2>/dev/null && return 0
+  lock_try && return 0
   [ -n "${1:-}" ] || return 1
   for i in $(seq 1 240); do
     sleep 0.5
-    mkdir "$st/lock" 2>/dev/null && return 0
+    lock_try && return 0
   done
   return 1
 }
@@ -555,17 +580,22 @@ sync_once() {
     take_lock wait && got=1
   fi
   if [ -z "$got" ]; then
+    # Running for hours — say so in the status line, or a sync that hangs would look like "already running" forever
+    if [ -n "$(find "$st/lock" -maxdepth 0 -mmin +"$LOCK_LONG_MIN" 2>/dev/null)" ]; then
+      set_error "$(t "a sync has been running for more than $((LOCK_LONG_MIN / 60)) h — sessync log" \
+        "синхронизация идёт дольше $((LOCK_LONG_MIN / 60)) ч — sessync log")"
+    fi
     # The running sync may have listed the files before this session wrote its last lines (a big
     # session uploads for minutes): let it run once more when done
     touch "$st/again"
     say "A sync is already running — it will run once more when it ends" "Синхронизация уже идёт — когда закончится, пройдёт ещё раз"
     return 75
   fi
-  trap 'rmdir "$st/lock" 2>/dev/null' EXIT
+  trap release_lock EXIT
   rm -f "$st/again"
   local rc
   sync_locked; rc=$?
-  rmdir "$st/lock" 2>/dev/null
+  release_lock
   trap - EXIT
   return $rc
 }
@@ -976,7 +1006,7 @@ case "${1:-now}" in
     done
     session_open "$sid" && exit 0   # still open: the next sync, once it is closed
     take_lock wait || exit 1
-    trap 'rmdir "$st/lock" 2>/dev/null' EXIT
+    trap release_lock EXIT
     mkdir -p "$st/forgot-prompts"
     forget_local "$sid" "" "$st/forgot-prompts/$sid.jsonl" >/dev/null ;;
 
@@ -1067,7 +1097,7 @@ case "${1:-now}" in
     [ -n "$now" ] && keep=""
     if [ -f "$st/off" ]; then
       take_lock wait || { say "A sync is running — try again in a couple of minutes" "Идёт синхронизация — повторите через пару минут"; exit 1; }
-      trap 'rmdir "$st/lock" 2>/dev/null' EXIT
+      trap release_lock EXIT
       forget_local "$sid" "" "$keep" >/dev/null
       say "Deleted on this Mac. Sync is off: from the storage and your other Macs it goes with the next sync (sessync on)." \
         "Удалена на этом Mac. Синхронизация выключена: из хранилища и с других Mac удалю при следующей синхронизации (sessync on)."
@@ -1086,7 +1116,7 @@ case "${1:-now}" in
     fi
     # The mark is written before anything is deleted, so a sync that sees the files gone sees it too
     if take_lock; then
-      trap 'rmdir "$st/lock" 2>/dev/null' EXIT
+      trap release_lock EXIT
       forget_local "$sid" "" "$keep" >/dev/null
       say "Deleted on this Mac; from the storage it goes with the next sync." "Удалена на этом Mac; из хранилища удалю при следующей синхронизации."
     else

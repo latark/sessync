@@ -780,6 +780,22 @@ rmdir "$(stf A lock)"
 check "следующая синхронизация проходит" run A now
 check "и снимает просьбу" test ! -e "$(stf A again)"
 check "блокировка снята" test ! -e "$(stf A lock)"
+mkdir "$(stf A lock)"; (exec -a sessync-holder sleep 60) & holder=$!
+echo $holder > "$(stf A lock)/pid"
+age_lock() { "${SESSYNC_PYTHON:-python3}" -I -c 'import os, sys, time; t = time.time() - float(sys.argv[2]) * 3600; os.utime(sys.argv[1], (t, t))' "$(stf A lock)" "$1"; }
+age_lock 4
+check "блокировка живого хозяина 4 ч не снимается: вторая синхронизация не встаёт рядом" has A 'пройдёт ещё раз' now
+check "идёт дольше 3 ч — это видно в статусе" grep -q 'идёт дольше 3 ч' "$(stf A error)"
+rm -f "$(stf A error)"
+kill $holder; wait $holder 2>/dev/null
+check "хозяина нет — блокировку снимает следующая синхронизация" run A now
+check "и после себя убирает" test ! -e "$(stf A lock)"
+mkdir "$(stf A lock)"; (exec -a sessync-holder sleep 60) & holder=$!; echo $holder > "$(stf A lock)/pid"; age_lock 25
+check "блокировку старше суток снимает и при живом хозяине (завис)" run A now
+kill $holder; wait $holder 2>/dev/null
+mkdir "$(stf A lock)"; echo 1 > "$(stf A lock)/pid"
+check "чужую блокировку при выходе не снимает" sh -c "CLAUDE_CONFIG_DIR='$T/A' XDG_CONFIG_HOME='$T/A/config' XDG_STATE_HOME='$T/A/state' bash -c \"source '$here/bin/sessync' version >/dev/null; release_lock\"; test -d '$(stf A lock)'"
+rm -rf "$(stf A lock)"
 
 echo "== Мелочи"
 src() { CLAUDE_CONFIG_DIR="$T/A" XDG_CONFIG_HOME="$T/A/config" XDG_STATE_HOME="$T/A/state" bash -c "source '$here/bin/sessync' version >/dev/null; $1"; }
