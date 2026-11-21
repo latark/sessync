@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.3 — 2026-11-22
+
+- A file rewritten whole while a sync runs (a subagent's `.meta.json` that Claude Code rewrites as the subagent
+  starts or finishes) no longer stops the whole run with "the file got shorter during the sync" and "did not
+  finish (code 1)" in the status line. Such a file is left for the next run, and the rest goes as usual. A grown
+  file was cut to the planned size before; now it isn't sent at all until the next run.
+
 ## 3.1.2 — 2026-11-22
 
 - A failed upload no longer leaves conflict copies on a single Mac. When some files of a run failed to upload
