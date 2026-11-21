@@ -117,6 +117,10 @@ def rclone(*args, out=None):
     if LOG:
         cmd += ["--log-file", LOG, "--log-level", "NOTICE"]
     p = subprocess.run(cmd, stdout=out if out is not None else subprocess.DEVNULL)
+    fail = os.environ.get("SESSYNC_TEST_FAIL_COPY") if os.environ.get("SESSYNC_TEST_REMOTE") else None
+    if fail and args[0] == "copy" and os.path.exists(fail):   # tests: an upload that broke off after the files went
+        os.remove(fail)
+        p.returncode = 1
     if p.returncode != 0:
         raise Fail(f"rclone {' '.join(args[:2])}: " + tx("code", "код") + f" {p.returncode}")
 
