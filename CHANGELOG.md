@@ -9,7 +9,9 @@
 - The sync lock holds the pid of its holder and is taken over only when that process is gone. Before, a lock
   older than 120 minutes was treated as left behind: a first run after moving project folders that took more than
   two hours got a second sync started next to it, in the same work folder. A process that lost the lock no longer
-  removes it on exit. A lock left by an older version is still taken over after 120 minutes.
+  removes it on exit. A lock left by an older version is still taken over after 120 minutes. A sync running for
+  more than 3 hours is shown in the status line ("a sync has been running for more than 3 h"), and a lock held for
+  a day is taken over even with its holder alive: a hung sync must not stop the archive silently.
 
 ## 3.1.0 — 2026-11-20
 

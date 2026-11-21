@@ -9,6 +9,8 @@
 # When the last claude closes, the background loop ends by itself.
 set -u
 VERSION=3.1.1
+LOCK_LONG_MIN=180   # a sync running longer — the status line says so
+LOCK_HUNG_MIN=1440  # a lock held longer — taken over even if its holder is alive (hung)
 # Everything sessync creates (downloaded sessions, other Macs' prompts, the log) is owner-only,
 # like Claude Code's own transcripts
 umask 077
@@ -538,6 +540,8 @@ lock_stale() {
   local p
   p=$(cat "$st/lock/pid" 2>/dev/null)
   if [ -n "$p" ]; then
+    # a holder alive for a day is hung (rclone waiting for a server forever): the archive must not stop silently
+    [ -n "$(find "$st/lock" -maxdepth 0 -mmin +"$LOCK_HUNG_MIN" 2>/dev/null)" ] && return 0
     ps -p "$p" -o command= 2>/dev/null | grep -q sessync && return 1
     return 0
   fi
@@ -576,6 +580,11 @@ sync_once() {
     take_lock wait && got=1
   fi
   if [ -z "$got" ]; then
+    # Running for hours — say so in the status line, or a sync that hangs would look like "already running" forever
+    if [ -n "$(find "$st/lock" -maxdepth 0 -mmin +"$LOCK_LONG_MIN" 2>/dev/null)" ]; then
+      set_error "$(t "a sync has been running for more than $((LOCK_LONG_MIN / 60)) h — sessync log" \
+        "синхронизация идёт дольше $((LOCK_LONG_MIN / 60)) ч — sessync log")"
+    fi
     # The running sync may have listed the files before this session wrote its last lines (a big
     # session uploads for minutes): let it run once more when done
     touch "$st/again"
