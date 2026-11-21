@@ -1509,7 +1509,7 @@ class Engine:
         lst = os.path.join(self.work, "landed.txt")
         with open(lst, "w") as f:
             f.write("".join(k + "\n" for k in whole))
-        p = subprocess.run(["rclone", "lsjson", "--files-only", "--no-mimetype", "--files-from-raw", lst, self.rbase],
+        p = subprocess.run(["rclone", "lsjson", "-R", "--files-only", "--no-mimetype", "--files-from-raw", lst, self.rbase],
                            capture_output=True)
         if p.returncode != 0:
             return
