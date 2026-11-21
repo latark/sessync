@@ -285,6 +285,17 @@ echo "одинаково на обоих" > "$T/P/projects/$A2"; echo "один�
 run P now >/dev/null; run Q now >/dev/null; run P now >/dev/null
 check "одинаково изменённое на обоих Mac — не конфликт" test ! -e "$T/Q/projects/$A2.conflict1" -a ! -e "$T/P/projects/$A2.conflict1"
 check "и дальше спокойно" has Q 'отправлено файлов 0, получено 0' now
+# отправка оборвалась на части файлов (сбой сети): дошедший файл записан как отправленный, и его
+# следующая правка здесь — не конфликт со своей же загрузкой (так появлялись копии на одном Mac)
+A3=-tmp-p4/s9/subagents/agent-x.meta.json
+mkdir -p "$(dirname "$T/P/projects/$A3")"; echo '{"agentType":"argus","finished":true}' > "$T/P/projects/$A3"
+touch "$T/fail-copy"; SESSYNC_TEST_FAIL_COPY="$T/fail-copy" run P now >/dev/null
+check "отправка оборвалась: дошедшее записано как отправленное" grep -q 'записаны как отправленные: 1' "$(stf P sync.log)"
+echo '{"agentType":"argus"}' > "$T/P/projects/$A3"   # окно продолжило субагента: файл переписан, стал меньше
+run P now >/dev/null; run Q now >/dev/null
+check "сбой был" test ! -e "$T/fail-copy"
+check "после оборванной отправки правка — не конфликт" test ! -e "$T/P/projects/$A3.conflict1"
+check "и новая версия дошла до другого Mac" sh -c "! grep -q finished '$T/Q/projects/$A3'"
 echo old > "$T/P/projects/-tmp-p4/old.sessync.tmp"; touch -t 202601010000 "$T/P/projects/-tmp-p4/old.sessync.tmp"
 echo new > "$T/P/projects/-tmp-p4/new.sessync.tmp"
 run P now >/dev/null; run Q now >/dev/null

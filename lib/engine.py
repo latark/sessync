@@ -117,6 +117,10 @@ def rclone(*args, out=None):
     if LOG:
         cmd += ["--log-file", LOG, "--log-level", "NOTICE"]
     p = subprocess.run(cmd, stdout=out if out is not None else subprocess.DEVNULL)
+    fail = os.environ.get("SESSYNC_TEST_FAIL_COPY") if os.environ.get("SESSYNC_TEST_REMOTE") else None
+    if fail and args[0] == "copy" and os.path.exists(fail):   # tests: an upload that broke off after the files went
+        os.remove(fail)
+        p.returncode = 1
     if p.returncode != 0:
         raise Fail(f"rclone {' '.join(args[:2])}: " + tx("code", "код") + f" {p.returncode}")
 
@@ -1461,7 +1465,12 @@ class Engine:
         for kind, root in (("b", self.rbase), ("s", self.rseg)):
             src = os.path.join(self.work, "out", kind)
             if os.path.isdir(src):
-                rclone("copy", src, root, "--no-check-dest", "--transfers", "8")
+                try:
+                    rclone("copy", src, root, "--no-check-dest", "--transfers", "8")
+                except Fail:
+                    if kind == "b":
+                        self.landed_whole(staged)
+                    raise
         for key, path, what, l, drop, sig in staged:
             st = self.files.get(key)
             if what[0] == "base":
@@ -1486,6 +1495,35 @@ class Engine:
                 log(f"{key}: " + tx("tails folded: ", "свёрнуто хвостов: ") + str(len(drop))
                     + (tx(" into a new base", " в новую основу") if what[0] == "base" else ""))
         self.save()
+
+    def landed_whole(self, staged):
+        """The upload failed on some files, but the others are in the storage. A file that is rewritten
+        whole (subagent .meta.json, tool results) and sent here must be recorded as sent: otherwise its
+        next change here meets this Mac's own upload as another Mac's change — a conflict with a copy.
+        Sent means the storage has it with the size and time this Mac gave it (the time of the upload
+        itself, not of the server, which a listing shows). Session files need no such step: a part sent
+        by an interrupted run is recognised by its content."""
+        whole = {key: (what, l) for key, path, what, l, drop, sig in staged if what[0] == "whole"}
+        if not whole:
+            return
+        lst = os.path.join(self.work, "landed.txt")
+        with open(lst, "w") as f:
+            f.write("".join(k + "\n" for k in whole))
+        p = subprocess.run(["rclone", "lsjson", "-R", "--files-only", "--no-mimetype", "--files-from-raw", lst, self.rbase],
+                           capture_output=True)
+        if p.returncode != 0:
+            return
+        n = 0
+        for e in json.loads(p.stdout or b"[]"):
+            what, l = whole.get(e.get("Path"), (None, None))
+            there = mtime_of(e.get("ModTime"))
+            if what and e.get("Size") == what[1] and there is not None and abs(there - l.mtime / 1e9) < 0.001:
+                self.files[e["Path"]] = self.wholestate("whole", l, (what[1], None))
+                n += 1
+        if n:
+            self.save()
+            log(tx("the upload failed, but files that reached the storage are recorded as sent: ",
+                   "отправка оборвалась, но файлы, дошедшие до хранилища, записаны как отправленные: ") + str(n))
 
     def to_trash(self, keys, rem):
         """First a copy to the trash inside the storage (no download), then the deletion: the bases

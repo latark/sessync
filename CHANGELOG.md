@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.2 — 2026-11-22
+
+- A failed upload no longer leaves conflict copies on a single Mac. When some files of a run failed to upload
+  (a network error), the others did reach the storage, but none were recorded as sent. A file rewritten whole
+  (a subagent's `.meta.json`) that changed again before the next run then met this Mac's own upload as another
+  Mac's change, and a `.conflict1` copy appeared ("conflicts: 1" in the status line). Now, after such a failure,
+  the whole files the storage holds with the size and time this Mac gave them are recorded as sent.
+
 ## 3.1.1 — 2026-11-21
 
 - S3 storage is reached over HTTP/1.1 (`RCLONE_DISABLE_HTTP2`). Some S3 services close HTTP/2 connections with
